@@ -46,9 +46,7 @@ int main(int argc, char **argv)
     FILE* file = fopen(targetFile, "r");
     if(!file)
     {
-        char buffer[256];
-        sprintf(buffer, "Cannot open file %s\n", targetFile);
-        printf("%s", buffer);
+        printf("Cannot open file %s\n", targetFile);
         return 0;
     }
 
@@ -105,15 +103,14 @@ int main(int argc, char **argv)
             else if(mod == 0b01)
             {
                 s8 data = buffer[offset++];
-                char* sign = data < 0 ? "" : "+";
 
                 if(d)
                 {
-                    printf("mov %s, [%s %s %d]\n", regTable[reg], rmTable[rm], sign, data);
+                    printf("mov %s, [%s + %d]\n", regTable[reg], rmTable[rm], data);
                 }
                 else
                 {
-                    printf("mov [%s %s %d], %s\n", rmTable[rm], sign, data, regTable[reg]);
+                    printf("mov [%s + %d], %s\n", rmTable[rm], data, regTable[reg]);
                 }
             }
             else if(mod == 0b10)
@@ -121,15 +118,14 @@ int main(int argc, char **argv)
                 u8 byte3 = buffer[offset++];
                 u8 byte4 = buffer[offset++];
                 s16 data = byte3 | (byte4 << 8);
-                char* sign = data < 0 ? "" : "+";
 
                 if(d)
                 {
-                    printf("mov %s, [%s %s %d]\n", regTable[reg], rmTable[rm], sign, data);
+                    printf("mov %s, [%s + %d]\n", regTable[reg], rmTable[rm], data);
                 }
                 else
                 {
-                    printf("mov [%s %s %d], %s\n", rmTable[rm], sign, data, regTable[reg]);
+                    printf("mov [%s + %d], %s\n", rmTable[rm], data, regTable[reg]);
                 }
             }
             else if(mod == 0b11)
