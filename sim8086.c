@@ -3,10 +3,12 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define u8 uint8_t 
+#define u8  uint8_t 
 #define u16 uint16_t 
 #define u32 uint32_t 
-#define i32 int32_t 
+#define s8  int8_t 
+#define s16 int16_t 
+#define s32 int32_t 
 
 #define BYTE_TO_BINARY(val)  \
   (val & 0x80 ? '1' : '0'), \
@@ -18,13 +20,13 @@
   (val & 0x02 ? '1' : '0'), \
   (val & 0x01 ? '1' : '0') 
 
-char* registers[16] = 
+char* regTable[16] = 
 {
     "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh",
     "ax", "cx", "dx", "bx", "sp", "bp", "si", "di"
 };
 
-char* rmEncodings[8] = 
+char* rmTable[8] = 
 {
     "bx + si", "bx + di", "bp + si", "bp + di", "si", "di", "bp", "bx"
 };
@@ -72,8 +74,6 @@ int main(int argc, char **argv)
         
         if(opCode == 0b1000) // Register/memory to/from register\n
         {
-            // D is set, REG field source, otherwise dest
-            // If W is set, word operations otherwise byte operations
             u8 d = (byte1 >> 1) & 0b1;
             u8 w = (byte1 >> 0) & 0b1;
             u8 mod = (byte2 >> 6) & 0b11;
@@ -94,32 +94,43 @@ int main(int argc, char **argv)
                 {   
                     if(d)
                     {
-                        printf("mov %s, [%s]\n", registers[reg], rmEncodings[rm]);
+                        printf("mov %s, [%s]\n", regTable[reg], rmTable[rm]);
                     }
                     else
                     {
-                        printf("mov [%s], %s\n", rmEncodings[rm], registers[reg]);
+                        printf("mov [%s], %s\n", rmTable[rm], regTable[reg]);
                     }
                 }
             }
             else if(mod == 0b01)
             {
-                u8 byte3 = buffer[offset++];
+                s8 data = buffer[offset++];
+                char* sign = data < 0 ? "" : "+";
+
                 if(d)
                 {
-                    printf("mov %s, [%s + %d]\n", registers[reg], rmEncodings[rm], byte3);
+                    printf("mov %s, [%s %s %d]\n", regTable[reg], rmTable[rm], sign, data);
                 }
                 else
                 {
-                    printf("mov [%s + %d], %s\n", rmEncodings[rm], byte3, registers[reg]);
+                    printf("mov [%s %s %d], %s\n", rmTable[rm], sign, data, regTable[reg]);
                 }
             }
             else if(mod == 0b10)
             {
                 u8 byte3 = buffer[offset++];
                 u8 byte4 = buffer[offset++];
-                u16 data = byte3 | (byte4 << 8);
-                printf("mov %s, [%s + %d]\n", registers[reg], rmEncodings[rm], data);
+                s16 data = byte3 | (byte4 << 8);
+                char* sign = data < 0 ? "" : "+";
+
+                if(d)
+                {
+                    printf("mov %s, [%s %s %d]\n", regTable[reg], rmTable[rm], sign, data);
+                }
+                else
+                {
+                    printf("mov [%s %s %d], %s\n", rmTable[rm], sign, data, regTable[reg]);
+                }
             }
             else if(mod == 0b11)
             {
@@ -131,7 +142,7 @@ int main(int argc, char **argv)
                 u8 src = d ? reg : rm;
                 u8 dest = d ? rm : reg;
 
-                printf("mov %s, %s\n", registers[src], registers[dest]);
+                printf("mov %s, %s\n", regTable[src], regTable[dest]);
             }
         }
         else if(opCode == 0b1100)
@@ -147,13 +158,13 @@ int main(int argc, char **argv)
             {
                 reg |= 0b1000;
                 u8 byte3 = buffer[offset++];
-                u16 data = byte2 | (byte3 << 8);
+                s16 data = byte2 | (byte3 << 8);
 
-                printf("mov %s, %d\n", registers[reg], data);
+                printf("mov %s, %d\n", regTable[reg], data);
             }
             else
             {
-                printf("mov %s, %d\n", registers[reg], byte2);
+                printf("mov %s, %d\n", regTable[reg], byte2);
             }
         }
         else if(opCode == 0b1010)
