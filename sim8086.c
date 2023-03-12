@@ -10,6 +10,12 @@
 #define s16 int16_t 
 #define s32 int32_t 
 
+#if 0
+#define LOG(fmt, ...) printf(fmt, __VA_ARGS__)
+#else
+#define LOG(fmt, ...) 
+#endif
+
 #define BYTE_TO_BINARY(val)  \
   (val & 0x80 ? '1' : '0'), \
   (val & 0x40 ? '1' : '0'), \
@@ -39,6 +45,11 @@ char* romTable[8] =
 
 //printf("data %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(data));
 
+
+void AddRomRom()
+{
+
+}
 int main(int argc, char **argv) 
 {
     if(argc == 0)
@@ -71,16 +82,203 @@ int main(int argc, char **argv)
         u8 byte1 = buffer[offset++];
         u8 byte2 = buffer[offset++];
 
-        //printf("byte1 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte1));
-        //printf("byte2 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte2));
+        LOG("0x%x\n", byte1);
+        LOG("byte1 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte1));
+        LOG("byte2 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte2));
 
         // Note: https://edge.edx.org/c4x/BITSPilani/EEE231/asset/8086_family_Users_Manual_1_.pdf
         // Intel manual 8086 guide -- Machine Instruction Decoding Guide
+        //
+        // Byte 1     | Byte 2      | Byte 3            | Byte 4            | Byte 5        | Byte 6
+        // OPCODE_D_W | MOD_REG_RM  | LOD DISP / Data   | HI DISP / DATA    | LOW DATA      | HI DATA 
+        // 000000_0_0 | 00_000_000
+        //
+        // MOD :
+        // 00 Memory mode no displacement (When R/M 110 16 bit displacement follows)
+        // 01 Memory mode 8 bit displacement
+        // 10 Memory mode 16 bit displacement
+        // 11 Register mode no displacement
+
         switch(byte1)
         {
-        case 0x85:
+        case 0x00:
+        case 0x01:
+        case 0x02:
+        case 0x03:
+        case 0x04:
+        case 0x05:
         {
+            char* op = "add";
+            u8 dir = (byte1 >> 1) & 0b1;
+            u8 wide = (byte1 >> 0) & 0b1;
+            u8 mod = (byte2 >> 6) & 0b11;
+            u8 reg = (byte2 >> 3) & 0b111;
+            u8 rom = (byte2 >> 0) & 0b111;
+            u8 imm = (byte1 >> 2) & 0b1;
+
+            if(imm == 0b1)
+            {
+                s16 data = byte2;
+
+                if(wide)
+                {
+                    u8 byte3 = buffer[offset++];
+                    data = (byte3 << 8) | byte2;
+                }
+
+                printf("%s %s, %d\n", op, regTable[wide][0], data);
+            }
+            else
+            {
+                if(mod == 0b00)
+                {
+                    if(rom == 0b110)
+                    {
+                        u8 byte3 = buffer[offset++];
+                        u8 byte4 = buffer[offset++];
+                        s16 data = (byte4 << 8) | byte3;
+                        printf("%s %s, [%d]\n", op, regTable[wide][reg], data);
+                    }
+                    else
+                    {   
+                        if(dir)
+                        {
+                            printf("%s %s, [%s]\n", op, regTable[wide][reg], romTable[rom]);
+                        }
+                        else
+                        {
+                            printf("%s [%s], %s\n", op, romTable[rom], regTable[wide][reg]);
+                        }
+                    }
+                }
+                else if(mod == 0b01)
+                {
+                    s8 data = buffer[offset++];
+
+                    if(dir)
+                    {
+                        printf("%s %s, [%s + %d]\n", op, regTable[wide][reg], romTable[rom], data);
+                    }
+                    else
+                    {
+                        printf("%s [%s + %d], %s\n", op, romTable[rom], data, regTable[wide][reg]);
+                    }
+                }
+                else if(mod == 0b10)
+                {
+                    u8 byte3 = buffer[offset++];
+                    u8 byte4 = buffer[offset++];
+                    s16 data = (byte4 << 8) | byte3;
+
+                    if(dir)
+                    {
+                        printf("%s %s, [%s + %d]\n", op, regTable[wide][reg], romTable[rom], data);
+                    }
+                    else
+                    {
+                        printf("%s [%s + %d], %s\n", op, romTable[rom], data, regTable[wide][reg]);
+                    }
+                }
+                else if(mod == 0b11)
+                {
+                    u8 src = dir ? reg : rom;
+                    u8 dest = dir ? rom : reg;
+
+                    printf("%s %s, %s\n", op, regTable[wide][src], regTable[wide][dest]);
+                }
+            }
+
         } break;
+
+        case 0x80:
+        case 0x81:
+        case 0x82:
+        case 0x83:
+        {
+            char* opcodes[8] = { "add", "or", "adc", "sbb", "and", "sub", "xor", "cmp" };
+            u8 opcodeIndex = (byte2 >> 3) & 0b111;
+            char* op = opcodes[opcodeIndex];
+
+            u8 dir = (byte1 >> 1) & 0b1;
+            u8 wide = (byte1 >> 0) & 0b1;
+            u8 mod = (byte2 >> 6) & 0b11;
+            u8 rom = (byte2 >> 0) & 0b111;
+
+            if(mod == 0b00)
+            {
+                if(rom == 0b110)
+                {
+                    u8 byte3 = buffer[offset++];
+                    u8 byte4 = buffer[offset++];
+                    s16 data = (byte4 << 8) | byte3;
+                    printf("%s %s, [%d]\n", op, romTable[rom], data);
+                }
+                else
+                {   
+                    if(wide)
+                    {
+                        u8 byte3 = buffer[offset++];
+                        u8 byte4 = buffer[offset++];
+                        s16 data = (byte4 << 8) | byte3;
+                        printf("%s word [%s], %d\n", op, romTable[rom], data);
+                    }
+                    else
+                    {
+                        s8 data = buffer[offset++];
+                        printf("%s byte [%s], %d\n", op, romTable[rom], data);
+                    }
+                }
+            }
+            else if(mod == 0b01)
+            {
+                u8 byte3 = buffer[offset++];
+                u8 byte4 = buffer[offset++];
+                u8 byte5 = buffer[offset++];
+                s16 displacement = (byte4 << 8) | byte3;
+
+                s16 data = byte5;
+                u8 check = (byte1 >> 0) & 0b11;
+                if(check == 0b01)
+                {
+                    u8 byte6 = buffer[offset++];
+                    data = (byte6 << 8) | byte5;
+                }
+
+                printf("%s word [%s + %d], %d\n", op, romTable[rom], displacement, data);
+            }
+            else if(mod == 0b10)
+            {
+                u8 byte3 = buffer[offset++];
+                u8 byte4 = buffer[offset++];
+                u8 byte5 = buffer[offset++];
+                s16 displacement = (byte4 << 8) | byte3;
+
+                s16 data = byte5;
+                u8 check = (byte1 >> 0) & 0b11;
+                if(check == 0b01)
+                {
+                    u8 byte6 = buffer[offset++];
+                    data = (byte6 << 8) | byte5;
+                }
+
+                printf("%s word [%s + %d], %d\n", op, romTable[rom], displacement, data);
+            }
+            else if(mod == 0b11)
+            {
+                u8 byte3 = buffer[offset++];
+                s16 data = byte3;
+
+                u8 check = (byte1 >> 0) & 0b11;
+                if(check == 0b01)
+                {
+                    u8 byte4 = buffer[offset++];
+                    data = (byte4 << 8) | byte3;
+                }
+
+                printf("%s %s, %d\n", op, regTable[wide][rom], data);
+            }
+        }
+        break;
 
         case 0x88:
         case 0x89:
@@ -88,6 +286,7 @@ int main(int argc, char **argv)
         case 0x8b:
         case 0x8c:
         {
+            char* op = "mov";
             u8 dir = (byte1 >> 1) & 0b1;
             u8 wide = (byte1 >> 0) & 0b1;
             u8 mod = (byte2 >> 6) & 0b11;
@@ -101,17 +300,17 @@ int main(int argc, char **argv)
                     u8 byte3 = buffer[offset++];
                     u8 byte4 = buffer[offset++];
                     s16 data = (byte4 << 8) | byte3;
-                    printf("mov %s, [%d]\n", regTable[wide][reg], data);
+                    printf("%s %s, [%d]\n", op, regTable[wide][reg], data);
                 }
                 else
                 {   
                     if(dir)
                     {
-                        printf("mov %s, [%s]\n", regTable[wide][reg], romTable[rom]);
+                        printf("%s %s, [%s]\n", op, regTable[wide][reg], romTable[rom]);
                     }
                     else
                     {
-                        printf("mov [%s], %s\n", romTable[rom], regTable[wide][reg]);
+                        printf("%s [%s], %s\n", op, romTable[rom], regTable[wide][reg]);
                     }
                 }
             }
@@ -121,11 +320,11 @@ int main(int argc, char **argv)
 
                 if(dir)
                 {
-                    printf("mov %s, [%s + %d]\n", regTable[wide][reg], romTable[rom], data);
+                    printf("%s %s, [%s + %d]\n", op, regTable[wide][reg], romTable[rom], data);
                 }
                 else
                 {
-                    printf("mov [%s + %d], %s\n", romTable[rom], data, regTable[wide][reg]);
+                    printf("%s [%s + %d], %s\n", op, romTable[rom], data, regTable[wide][reg]);
                 }
             }
             else if(mod == 0b10)
@@ -136,11 +335,11 @@ int main(int argc, char **argv)
 
                 if(dir)
                 {
-                    printf("mov %s, [%s + %d]\n", regTable[wide][reg], romTable[rom], data);
+                    printf("%s %s, [%s + %d]\n", op, regTable[wide][reg], romTable[rom], data);
                 }
                 else
                 {
-                    printf("mov [%s + %d], %s\n", romTable[rom], data, regTable[wide][reg]);
+                    printf("%s [%s + %d], %s\n", op, romTable[rom], data, regTable[wide][reg]);
                 }
             }
             else if(mod == 0b11)
@@ -148,7 +347,7 @@ int main(int argc, char **argv)
                 u8 src = dir ? reg : rom;
                 u8 dest = dir ? rom : reg;
 
-                printf("mov %s, %s\n", regTable[wide][src], regTable[wide][dest]);
+                printf("%s %s, %s\n", op, regTable[wide][src], regTable[wide][dest]);
             }
         } break;
 
@@ -209,6 +408,7 @@ int main(int argc, char **argv)
         case 0xc6:
         case 0xc7:
         {
+            char* op = "mov";
             u8 wide = (byte1 >> 0) & 0b1;
             u8 mod = (byte2 >> 6) & 0b11;
             u8 rom = (byte2 >> 0) & 0b111;
@@ -227,12 +427,12 @@ int main(int argc, char **argv)
                         u8 byte3 = buffer[offset++];
                         u8 byte4 = buffer[offset++];
                         s16 data = (byte4 << 8) | byte3;
-                        printf("mov [%s], word %d\n", romTable[rom], data);
+                        printf("%s [%s], word %d\n", op, romTable[rom], data);
                     }
                     else
                     {
                         s8 data = buffer[offset++];
-                        printf("mov [%s], byte %d\n", romTable[rom], data);
+                        printf("%s [%s], byte %d\n", op, romTable[rom], data);
                     }
                 }
             }
@@ -240,7 +440,7 @@ int main(int argc, char **argv)
             {
                 s8 displacement = buffer[offset++];
                 s8 data = buffer[offset++];
-                printf("mov [%s + %d], %s %d\n", romTable[rom], displacement, size, data);
+                printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
             }
             else if(mod == 0b10)
             {
@@ -251,7 +451,7 @@ int main(int argc, char **argv)
                 s16 displacement = (byte4 << 8) | byte3;
                 s16 data = (byte6 << 8) | byte5;
 
-                printf("mov [%s + %d], %s %d\n", romTable[rom], displacement, size, data);
+                printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
             }
         }
         break;
