@@ -315,6 +315,102 @@ int main(int argc, char **argv)
             RomRom("cmp", byte1, byte2, buffer);
         } break;
 
+        case 0x70:
+        {
+            s8 ip = byte2;
+            printf("jo $+%d\n", ip + 2);
+        } break;
+
+        case 0x71:
+        {
+            s8 ip = byte2;
+            printf("jno $+%d\n", ip + 2);
+        } break;
+
+        case 0x72:
+        {
+            s8 ip = byte2;
+            printf("jb $+%d\n", ip + 2);
+        } break;
+
+        case 0x73:
+        {
+            s8 ip = byte2;
+            printf("jnb $+%d\n", ip + 2);
+        } break;
+
+        case 0x74:
+        {
+            s8 ip = byte2;
+            printf("je $+%d\n", ip + 2);
+        } break;
+
+        case 0x75:
+        {
+            s8 ip = byte2;
+            printf("jne $+%d\n", ip + 2);
+        } break;
+
+        case 0x76:
+        {
+            s8 ip = byte2;
+            printf("jbe $+%d\n", ip + 2);
+        } break;
+
+        case 0x77:
+        {
+            s8 ip = byte2;
+            printf("jnbe $+%d\n", ip + 2);
+        } break;
+
+        case 0x78:
+        {
+            s8 ip = byte2;
+            printf("js $+%d\n", ip + 2);
+        } break;
+
+        case 0x79:
+        {
+            s8 ip = byte2;
+            printf("jns $+%d\n", ip + 2);
+        } break;
+
+        case 0x7a:
+        {
+            s8 ip = byte2;
+            printf("jp $+%d\n", ip + 2);
+        } break;
+
+        case 0x7b:
+        {
+            s8 ip = byte2;
+            printf("jnp $+%d\n", ip + 2);
+        } break;
+
+        case 0x7c:
+        {
+            s8 ip = byte2;
+            printf("jl $+%d\n", ip + 2);
+        } break;
+
+        case 0x7d:
+        {
+            s8 ip = byte2;
+            printf("jnl $+%d\n", ip + 2);
+        } break;
+
+        case 0x7e:
+        {
+            s8 ip = byte2;
+            printf("jle $+%d\n", ip + 2);
+        } break;
+
+        case 0x7f:
+        {
+            s8 ip = byte2;
+            printf("jnle $+%d\n", ip + 2);
+        } break;
+
         case 0x80:
         case 0x81:
         case 0x82:
@@ -497,8 +593,32 @@ int main(int argc, char **argv)
 
                 printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
             }
-        }
-        break;
+        } break;
+
+        case 0xe0:
+        {
+            s8 ip = byte2;
+            printf("loopne $+%d\n", ip + 2);
+        } break;
+
+        case 0xe1:
+        {
+            s8 ip = byte2;
+            printf("loope $+%d\n", ip + 2);
+        } break;
+
+        case 0xe2:
+        {
+            s8 ip = byte2;
+            printf("loop $+%d\n", ip + 2);
+        } break;
+
+        case 0xe3:
+        {
+            s8 ip = byte2;
+            printf("jcxz $+%d\n", ip + 2);
+        } break;
+
 
         default: 
         {
