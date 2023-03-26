@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define u8  uint8_t 
 #define u16 uint16_t 
@@ -46,14 +47,12 @@ char* romTable[8] =
 //printf("data %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(data));
 
 u32 offset = 0;
-void RomRom(char* op, u8 byte1, u8 byte2, u8* buffer)
+
+void RomRom(char* op, u8 byte1, u8 byte2, u8* buffer, u8 wide, u8 reg, u8 imm)
 {
     u8 dir = (byte1 >> 1) & 0b1;
-    u8 wide = (byte1 >> 0) & 0b1;
     u8 mod = (byte2 >> 6) & 0b11;
-    u8 reg = (byte2 >> 3) & 0b111;
     u8 rom = (byte2 >> 0) & 0b111;
-    u8 imm = (byte1 >> 2) & 0b1;
 
     if(imm == 0b1)
     {
@@ -65,7 +64,7 @@ void RomRom(char* op, u8 byte1, u8 byte2, u8* buffer)
             data = (byte3 << 8) | byte2;
         }
 
-        printf("%s %s, %d\n", op, regTable[wide][0], data);
+        printf("%s %s, %d\n", op, regTable[wide][reg], data);
     }
     else
     {
@@ -128,11 +127,19 @@ void RomRom(char* op, u8 byte1, u8 byte2, u8* buffer)
     }
 }
 
-void AddOrAdcSbbAndSubXorCmp(u8 byte1, u8 byte2, u8* buffer)
+void AddOrAdcSbbAndSubXorCmpMov(u8 byte1, u8 byte2, u8* buffer, bool mov)
 {
-    char* opcodes[8] = { "add", "or", "adc", "sbb", "and", "sub", "xor", "cmp" };
-    u8 opcodeIndex = (byte2 >> 3) & 0b111;
-    char* op = opcodes[opcodeIndex];
+    char* op = 0;
+    if(mov)
+    {
+        op = "mov";
+    }
+    else
+    {
+        char* opcodes[8] = { "add", "or", "adc", "sbb", "and", "sub", "xor", "cmp" };
+        u8 opcodeIndex = (byte2 >> 3) & 0b111;
+        op = opcodes[opcodeIndex];
+    }
 
     u8 dir = (byte1 >> 1) & 0b1;
     u8 wide = (byte1 >> 0) & 0b1;
@@ -147,14 +154,13 @@ void AddOrAdcSbbAndSubXorCmp(u8 byte1, u8 byte2, u8* buffer)
         {
             u8 byte3 = buffer[offset++];
 
-            u8 check = (byte1 >> 0) & 0b11;
-            if(check == 0b01)
+            if(!dir && wide)
             {
                 u8 byte4 = buffer[offset++];
                 s16 data = (byte4 << 8) | byte3;
                 printf("%s %s [%d], %s\n", op, size, data, romTable[rom]);
             }
-            else if(check == 0b10)
+            else if(dir && !wide)
             {
                 s16 data = byte3;
                 printf("%s %s [%s], %d\n", op, size, romTable[rom], data);
@@ -171,61 +177,89 @@ void AddOrAdcSbbAndSubXorCmp(u8 byte1, u8 byte2, u8* buffer)
         {   
             u8 byte3 = buffer[offset++];
 
-            u8 check = (byte1 >> 0) & 0b11;
-            if(check == 0b01)
+            if(!dir && wide)
             {
                 u8 byte4 = buffer[offset++];
                 s16 data = (byte4 << 8) | byte3;
-                printf("%s %s [%s], %d\n", op, size, romTable[rom], data);
+                if(mov)
+                {
+                    printf("%s [%s], %s %d\n", op, romTable[rom], size, data);
+                }
+                else
+                {
+                    printf("%s %s [%s], %d\n", op, size, romTable[rom], data);
+                }
             }
             else
             {
                 s16 data = byte3;
-                printf("%s %s [%s], %d\n", op, size, romTable[rom], data);
+
+                if(mov)
+                {
+                    printf("%s [%s], %s %d\n", op, romTable[rom], size, data);
+                }
+                else
+                {
+                    printf("%s %s [%s], %d\n", op, size, romTable[rom], data);
+                }
             }
         }
     }
     else if(mod == 0b01)
     {
-        u8 byte3 = buffer[offset++];
-        u8 byte4 = buffer[offset++];
-        u8 byte5 = buffer[offset++];
-        s16 displacement = (byte4 << 8) | byte3;
-
-        s16 data = byte5;
-        u8 check = (byte1 >> 0) & 0b11;
-        if(check == 0b01)
+        if(mov)
         {
-            u8 byte6 = buffer[offset++];
-            data = (byte6 << 8) | byte5;
+            s8 displacement = buffer[offset++];
+            s8 data = buffer[offset++];
+            printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
+        }
+        else
+        {
+            u8 byte3 = buffer[offset++];
+            u8 byte4 = buffer[offset++];
+            u8 byte5 = buffer[offset++];
+            s16 displacement = (byte4 << 8) | byte3;
+
+            s16 data = byte5;
+            if(wide)
+            {
+                u8 byte6 = buffer[offset++];
+                data = (byte6 << 8) | byte5;
+            }
+            printf("%s %s [%s + %d], %d\n", op, size, romTable[rom], displacement, data);
         }
 
-        printf("%s %s [%s + %d], %d\n", op, size, romTable[rom], displacement, data);
     }
     else if(mod == 0b10)
     {
         u8 byte3 = buffer[offset++];
         u8 byte4 = buffer[offset++];
         u8 byte5 = buffer[offset++];
-        s16 displacement = (byte4 << 8) | byte3;
 
+        s16 displacement = (byte4 << 8) | byte3;
         s16 data = byte5;
-        u8 check = (byte1 >> 0) & 0b11;
-        if(check == 0b01)
+
+        if(mov)
         {
-            u8 byte6 = buffer[offset++];
-            data = (byte6 << 8) | byte5;
+            if(wide)
+            {
+                u8 byte6 = buffer[offset++];
+                data = (byte6 << 8) | byte5;
+            }
+            printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
+        }
+        else
+        {
+            printf("%s %s [%s + %d], %d\n", op, size, romTable[rom], displacement, data);
         }
 
-        printf("%s %s [%s + %d], %d\n", op, size, romTable[rom], displacement, data);
     }
     else if(mod == 0b11)
     {
         u8 byte3 = buffer[offset++];
         s16 data = byte3;
 
-        u8 check = (byte1 >> 0) & 0b11;
-        if(check == 0b01)
+        if(!dir && wide)
         {
             u8 byte4 = buffer[offset++];
             data = (byte4 << 8) | byte3;
@@ -243,7 +277,26 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    char* targetFile = argv[1];
+    char* targetFile = 0;
+    bool executionMode = false;
+    if(argc == 3)
+    {
+        char* mode = argv[1];
+        if(strcmp(mode, "-exec") == 0)
+        {
+            executionMode = true;
+            targetFile = argv[2];
+        }
+        else
+        {
+            printf("Unknown command %s\n", mode);
+            return 0;
+        }
+    }
+    else
+    {
+        targetFile = argv[1];
+    }
 
     FILE* file = fopen(targetFile, "r");
     if(!file)
@@ -267,8 +320,8 @@ int main(int argc, char **argv)
         u8 byte2 = buffer[offset++];
 
         LOG("0x%x\n", byte1);
-        LOG("byte1 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte1));
-        LOG("byte2 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte2));
+        //LOG("byte1 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte1));
+        //LOG("byte2 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte2));
 
         // Note: https://edge.edx.org/c4x/BITSPilani/EEE231/asset/8086_family_Users_Manual_1_.pdf
         // Intel manual 8086 guide -- Machine Instruction Decoding Guide
@@ -292,7 +345,14 @@ int main(int argc, char **argv)
         case 0x04:
         case 0x05:
         {
-            RomRom("add", byte1, byte2, buffer);
+            u8 wide = (byte1 >> 0) & 0b1;
+            u8 reg = (byte2 >> 3) & 0b111;
+            u8 imm = (byte1 >> 2) & 0b1;
+            if(imm == 0b1)
+            {
+                reg = 0;
+            }
+            RomRom("add", byte1, byte2, buffer, wide, reg, imm);
         } break;
 
         case 0x28:
@@ -302,7 +362,14 @@ int main(int argc, char **argv)
         case 0x2c:
         case 0x2d:
         {
-            RomRom("sub", byte1, byte2, buffer);
+            u8 wide = (byte1 >> 0) & 0b1;
+            u8 reg = (byte2 >> 3) & 0b111;
+            u8 imm = (byte1 >> 2) & 0b1;
+            if(imm == 0b1)
+            {
+                reg = 0;
+            }
+            RomRom("sub", byte1, byte2, buffer, wide, reg, imm);
         } break;
 
         case 0x38:
@@ -312,7 +379,14 @@ int main(int argc, char **argv)
         case 0x3c:
         case 0x3d:
         {
-            RomRom("cmp", byte1, byte2, buffer);
+            u8 wide = (byte1 >> 0) & 0b1;
+            u8 reg = (byte2 >> 3) & 0b111;
+            u8 imm = (byte1 >> 2) & 0b1;
+            if(imm == 0b1)
+            {
+                reg = 0;
+            }
+            RomRom("cmp", byte1, byte2, buffer, wide, reg, imm);
         } break;
 
         case 0x70:
@@ -416,7 +490,7 @@ int main(int argc, char **argv)
         case 0x82:
         case 0x83:
         {
-            AddOrAdcSbbAndSubXorCmp(byte1, byte2, buffer);
+            AddOrAdcSbbAndSubXorCmpMov(byte1, byte2, buffer, false);
         }
         break;
 
@@ -426,69 +500,10 @@ int main(int argc, char **argv)
         case 0x8b:
         case 0x8c:
         {
-            char* op = "mov";
-            u8 dir = (byte1 >> 1) & 0b1;
             u8 wide = (byte1 >> 0) & 0b1;
-            u8 mod = (byte2 >> 6) & 0b11;
             u8 reg = (byte2 >> 3) & 0b111;
-            u8 rom = (byte2 >> 0) & 0b111;
-
-            if(mod == 0b00)
-            {
-                if(rom == 0b110)
-                {
-                    u8 byte3 = buffer[offset++];
-                    u8 byte4 = buffer[offset++];
-                    s16 data = (byte4 << 8) | byte3;
-                    printf("%s %s, [%d]\n", op, regTable[wide][reg], data);
-                }
-                else
-                {   
-                    if(dir)
-                    {
-                        printf("%s %s, [%s]\n", op, regTable[wide][reg], romTable[rom]);
-                    }
-                    else
-                    {
-                        printf("%s [%s], %s\n", op, romTable[rom], regTable[wide][reg]);
-                    }
-                }
-            }
-            else if(mod == 0b01)
-            {
-                s8 data = buffer[offset++];
-
-                if(dir)
-                {
-                    printf("%s %s, [%s + %d]\n", op, regTable[wide][reg], romTable[rom], data);
-                }
-                else
-                {
-                    printf("%s [%s + %d], %s\n", op, romTable[rom], data, regTable[wide][reg]);
-                }
-            }
-            else if(mod == 0b10)
-            {
-                u8 byte3 = buffer[offset++];
-                u8 byte4 = buffer[offset++];
-                s16 data = (byte4 << 8) | byte3;
-
-                if(dir)
-                {
-                    printf("%s %s, [%s + %d]\n", op, regTable[wide][reg], romTable[rom], data);
-                }
-                else
-                {
-                    printf("%s [%s + %d], %s\n", op, romTable[rom], data, regTable[wide][reg]);
-                }
-            }
-            else if(mod == 0b11)
-            {
-                u8 src = dir ? reg : rom;
-                u8 dest = dir ? rom : reg;
-
-                printf("%s %s, %s\n", op, regTable[wide][src], regTable[wide][dest]);
-            }
+            u8 imm = 0;
+            RomRom("mov", byte1, byte2, buffer, wide, reg, imm);
         } break;
 
         case 0xa0:
@@ -496,19 +511,26 @@ int main(int argc, char **argv)
         case 0xa2:
         case 0xa3:
         {
+            char* op = "mov";
             u8 dir = (byte1 >> 1) & 0b1;
             u8 wide = (byte1 >> 0) & 0b1;
+            u8 reg = 0;
 
-            u8 byte3 = buffer[offset++];
-            s16 data = (byte3 << 8) | byte2;
+            s16 data = byte2;
+
+            if(wide)
+            {
+                u8 byte3 = buffer[offset++];
+                data = (byte3 << 8) | byte2;
+            }
 
             if(dir)
             {
-                printf("mov [%d], %s\n", data, regTable[wide][0]);
+                printf("%s [%d], %s\n", op, data, regTable[wide][reg]);
             }
             else
             {
-                printf("mov %s, [%d]\n", regTable[wide][0], data);
+                printf("%s %s, [%d]\n", op, regTable[wide][reg], data);
             }
         } break;
 
@@ -531,68 +553,14 @@ int main(int argc, char **argv)
         {
             u8 wide = (byte1 >> 3) & 0b1;
             u8 reg = (byte1 >> 0) & 0b111;
-
-            if(wide)
-            {
-                u8 byte3 = buffer[offset++];
-                s16 data = (byte3 << 8) | byte2;
-
-                printf("mov %s, %d\n", regTable[wide][reg], data);
-            }
-            else
-            {
-                printf("mov %s, %d\n", regTable[wide][reg], byte2);
-            }
+            u8 imm = 1;
+            RomRom("mov", byte1, byte2, buffer, wide, reg, imm);
         } break;
 
         case 0xc6:
         case 0xc7:
         {
-            char* op = "mov";
-            u8 wide = (byte1 >> 0) & 0b1;
-            u8 mod = (byte2 >> 6) & 0b11;
-            u8 rom = (byte2 >> 0) & 0b111;
-
-            char* size = wide ? "word" : "byte";
-
-            if(mod == 0b00)
-            {
-                if(rom == 0b110)
-                {
-                }
-                else
-                {   
-                    if(wide)
-                    {
-                        u8 byte3 = buffer[offset++];
-                        u8 byte4 = buffer[offset++];
-                        s16 data = (byte4 << 8) | byte3;
-                        printf("%s [%s], %s %d\n", op, romTable[rom], size, data);
-                    }
-                    else
-                    {
-                        s8 data = buffer[offset++];
-                        printf("%s [%s], %s %d\n", op, romTable[rom], size, data);
-                    }
-                }
-            }
-            else if(mod == 0b01)
-            {
-                s8 displacement = buffer[offset++];
-                s8 data = buffer[offset++];
-                printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
-            }
-            else if(mod == 0b10)
-            {
-                u8 byte3 = buffer[offset++];
-                u8 byte4 = buffer[offset++];
-                u8 byte5 = buffer[offset++];
-                u8 byte6 = buffer[offset++];
-                s16 displacement = (byte4 << 8) | byte3;
-                s16 data = (byte6 << 8) | byte5;
-
-                printf("%s [%s + %d], %s %d\n", op, romTable[rom], displacement, size, data);
-            }
+            AddOrAdcSbbAndSubXorCmpMov(byte1, byte2, buffer, true);
         } break;
 
         case 0xe0:
@@ -625,6 +593,18 @@ int main(int argc, char **argv)
             printf("0x%x unimplemented\n", byte1);
         } break;
 
+        }
+    }
+
+    for(int index = 0; index < count; ++index)
+    {
+        if(executionMode)
+        {
+            //TODO execute
+        }
+        else
+        {
+            //TODO print operations
         }
     }
 
