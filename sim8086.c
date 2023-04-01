@@ -111,7 +111,7 @@ typedef enum OperandCode
 
 typedef struct Operand
 {
-    OperandCode code;
+    OperandCode opCode;
     RegisterCode regCode;
     s16 displacement;
     bool accumulator;
@@ -121,7 +121,7 @@ typedef struct Operand
 
 typedef struct Instruction
 {
-    InstructionCode code;
+    InstructionCode instCode;
     Operand operands[2];
 } Instruction;
 
@@ -141,6 +141,18 @@ RegisterCode regTable16[8] =
 };
 
 RegisterCode* regTable[2] = { regTable8, regTable16 };
+
+typedef struct Registers
+{
+    s16 ax;
+    s16 cx;
+    s16 dx;
+    s16 bx;
+    s16 sp;
+    s16 bp;
+    s16 si;
+    s16 di;
+} Registers;
 
 char* GetRegCodeStr(RegisterCode code)
 {
@@ -169,6 +181,25 @@ char* GetRegCodeStr(RegisterCode code)
     case BX_DI: { result = "bx + di"; } break;
     case BP_SI: { result = "bp + si"; } break;
     case BP_DI: { result = "bp + di"; } break;
+    default: break;
+    }
+
+    return result;
+}
+
+s16 *GetRegister(Registers *registers, RegisterCode code)
+{
+    s16 *result = 0;
+    switch(code)
+    {
+    case AX: { result = &registers->ax; } break;
+    case CX: { result = &registers->cx; } break;
+    case DX: { result = &registers->dx; } break;
+    case BX: { result = &registers->bx; } break;
+    case SP: { result = &registers->sp; } break;
+    case BP: { result = &registers->bp; } break;
+    case SI: { result = &registers->si; } break;
+    case DI: { result = &registers->di; } break;
     default: break;
     }
 
@@ -217,16 +248,268 @@ char* GetInstructionCodeStr(InstructionCode code)
     return result;
 }
 
-Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide, u8 reg, u8 imm)
+void HandleInstruction(Registers *registers, InstructionCode code, Operand leftOperand, Operand rightOperand)
+{
+    char* instructionCode = GetInstructionCodeStr(code);
+
+    switch(code)
+    {
+
+    case Add:
+    case Or:
+    case Adc:
+    case Sbb:
+    case And:
+    case Sub:
+    case Xor:
+    case Cmp:
+    {
+    } break;
+
+    case Mov: 
+    {
+        s16 *leftReg = GetRegister(registers, leftOperand.regCode);
+        s16 *rightReg = GetRegister(registers, rightOperand.regCode);
+
+        if(rightOperand.opCode == Register)
+        {
+            *leftReg = *rightReg;
+        }
+        else if(rightOperand.opCode == Memory)
+        {
+            *leftReg = *rightReg;
+        }
+        else if(rightOperand.opCode == Immediate)
+        {
+            *leftReg = rightOperand.displacement;
+        }
+    } break;
+
+    case Jo:
+    case Jno:
+    case Jb: 
+    case Jnb: 
+    case Je: 
+    case Jne: 
+    case Jbe: 
+    case Jnbe:
+    case Js: 
+    case Jns:
+    case Jp: 
+    case Jnp:
+    case Jl: 
+    case Jnl:
+    case Jle:
+    case Jnle: 
+    case Loopne:
+    case Loope:
+    case Loop:
+    case Jcxz:
+    { 
+    }
+    break;
+
+
+    default: break;
+    }
+}
+
+void PrintInstruction(InstructionCode code, Operand leftOperand, Operand rightOperand)
+{
+    char* instructionCode = GetInstructionCodeStr(code);
+    char* leftOperandStr = GetRegCodeStr(leftOperand.regCode);
+    char* rightOperandStr = GetRegCodeStr(rightOperand.regCode);
+
+    fprintf(stdout, "%s ", instructionCode);
+
+    switch(code)
+    {
+
+    case Add:
+    case Or:
+    case Adc:
+    case Sbb:
+    case And:
+    case Sub:
+    case Xor:
+    case Cmp:
+    {
+        if(leftOperand.opCode == Register)
+        {
+            fprintf(stdout, "%s, ", leftOperandStr);
+        }
+        else if(leftOperand.opCode == Memory)
+        {
+            if(rightOperand.opCode == Immediate)
+            {
+                if(leftOperand.literals)
+                {
+                    fprintf(stdout, "%s [%s", leftOperand.literals, leftOperandStr);
+
+                    if(leftOperand.displacement)
+                    {
+                        fprintf(stdout, " + %d", leftOperand.displacement);
+                    }
+
+                    fprintf(stdout, "], ");
+                }
+                else
+                {
+                    fprintf(stdout, "%s, ", leftOperandStr);
+                }
+            }
+            else
+            {
+                fprintf(stdout, "[%s", leftOperandStr);
+
+                if(leftOperand.displacement)
+                {
+                    fprintf(stdout, " + %d", leftOperand.displacement);
+                }
+
+                fprintf(stdout, "], ");
+            }
+        }
+
+        if(rightOperand.opCode == Register)
+        {
+            fprintf(stdout, "%s", rightOperandStr);
+        }
+        else if(rightOperand.opCode == Memory)
+        {
+            fprintf(stdout, "[");
+            if(rightOperand.regCode != RegisterCode_None)
+            {
+                char* rightOperandStr = GetRegCodeStr(rightOperand.regCode);
+                fprintf(stdout, "%s", rightOperandStr);
+
+                if(rightOperand.displacement)
+                {
+                    fprintf(stdout, " + %d", rightOperand.displacement);
+                }
+            }
+            else
+            {
+                fprintf(stdout, "%d", rightOperand.displacement);
+            }
+
+            fprintf(stdout, "]");
+        }
+        else if(rightOperand.opCode == Immediate)
+        {
+            fprintf(stdout, "%d", rightOperand.displacement);
+        }
+    } break;
+
+    case Mov: 
+    {
+        if(leftOperand.opCode == Register)
+        {
+            fprintf(stdout, "%s, ", leftOperandStr);
+        }
+        else if(leftOperand.opCode == Memory)
+        {
+            fprintf(stdout, "[%s", leftOperandStr);
+
+            if(leftOperand.displacement)
+            {
+                fprintf(stdout, " + %d", leftOperand.displacement);
+            }
+
+            fprintf(stdout, "], ");
+        }
+        else if(leftOperand.opCode == Immediate)
+        {
+            if(leftOperand.accumulator)
+            {
+                fprintf(stdout, "[%d], ", leftOperand.displacement);
+            }
+            else
+            {
+                fprintf(stdout, "%d, ", leftOperand.displacement);
+            }
+        }
+
+        if(rightOperand.opCode == Register)
+        {
+            fprintf(stdout, "%s", rightOperandStr);
+        }
+        else if(rightOperand.opCode == Memory)
+        {
+            fprintf(stdout, "[");
+            if(rightOperand.regCode != RegisterCode_None)
+            {
+                fprintf(stdout, "%s", rightOperandStr);
+
+                if(rightOperand.displacement)
+                {
+                    fprintf(stdout, " + %d", rightOperand.displacement);
+                }
+            }
+            else
+            {
+                fprintf(stdout, "%d", rightOperand.displacement);
+            }
+
+            fprintf(stdout, "]");
+        }
+        else if(rightOperand.opCode == Immediate)
+        {
+            if(rightOperand.accumulator)
+            {
+                fprintf(stdout, "[%d]", rightOperand.displacement);
+            }
+            else
+            {
+                if(rightOperand.literals)
+                {
+                    fprintf(stdout, "%s ", rightOperand.literals);
+                }
+                fprintf(stdout, "%d", rightOperand.displacement);
+            }
+        }
+    } break;
+
+    case Jo:
+    case Jno:
+    case Jb: 
+    case Jnb: 
+    case Je: 
+    case Jne: 
+    case Jbe: 
+    case Jnbe:
+    case Js: 
+    case Jns:
+    case Jp: 
+    case Jnp:
+    case Jl: 
+    case Jnl:
+    case Jle:
+    case Jnle: 
+    case Loopne:
+    case Loope:
+    case Loop:
+    case Jcxz:
+    { 
+        fprintf(stdout, "$+%d", leftOperand.displacement);
+    }
+    break;
+
+
+    default: break;
+    }
+}
+
+Instruction RegRom(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer, u8 wide, u8 reg, u8 imm)
 {
     Instruction result = {};
-    result.code = code;
+    result.instCode = instCode;
 
     u8 dir = (byte1 >> 1) & 0b1;
     u8 mod = (byte2 >> 6) & 0b11;
     u8 rom = (byte2 >> 0) & 0b111;
 
-    char* op = GetInstructionCodeStr(code);
+    char* op = GetInstructionCodeStr(instCode);
 
     if(imm == 0b1)
     {
@@ -238,9 +521,9 @@ Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide
             data = (byte3 << 8) | byte2;
         }
 
-        result.operands[0].code = Register;
+        result.operands[0].opCode = Register;
         result.operands[0].regCode = regTable[wide][reg];
-        result.operands[1].code = Immediate;
+        result.operands[1].opCode = Immediate;
         result.operands[1].displacement = data;
     }
     else
@@ -253,25 +536,25 @@ Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide
                 u8 byte4 = buffer[offset++];
                 s16 data = (byte4 << 8) | byte3;
 
-                result.operands[0].code = Register;
+                result.operands[0].opCode = Register;
                 result.operands[0].regCode = regTable[wide][reg];
-                result.operands[1].code = Memory;
+                result.operands[1].opCode = Memory;
                 result.operands[1].displacement = data;
             }
             else
             {   
                 if(dir)
                 {
-                    result.operands[0].code = Register;
+                    result.operands[0].opCode = Register;
                     result.operands[0].regCode = regTable[wide][reg];
-                    result.operands[1].code = Memory;
+                    result.operands[1].opCode = Memory;
                     result.operands[1].regCode = romTable[rom];
                 }
                 else
                 {
-                    result.operands[0].code = Memory;
+                    result.operands[0].opCode = Memory;
                     result.operands[0].regCode = romTable[rom];
-                    result.operands[1].code = Register;
+                    result.operands[1].opCode = Register;
                     result.operands[1].regCode = regTable[wide][reg];
                 }
             }
@@ -282,18 +565,18 @@ Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide
 
             if(dir)
             {
-                result.operands[0].code = Register;
+                result.operands[0].opCode = Register;
                 result.operands[0].regCode = regTable[wide][reg];
-                result.operands[1].code = Memory;
+                result.operands[1].opCode = Memory;
                 result.operands[1].regCode = romTable[rom];
                 result.operands[1].displacement = data;
             }
             else
             {
-                result.operands[0].code = Memory;
+                result.operands[0].opCode = Memory;
                 result.operands[0].regCode = romTable[rom];
                 result.operands[0].displacement = data;
-                result.operands[1].code = Register;
+                result.operands[1].opCode = Register;
                 result.operands[1].regCode = regTable[wide][reg];
             }
         }
@@ -305,18 +588,18 @@ Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide
 
             if(dir)
             {
-                result.operands[0].code = Register;
+                result.operands[0].opCode = Register;
                 result.operands[0].regCode = regTable[wide][reg];
-                result.operands[1].code = Memory;
+                result.operands[1].opCode = Memory;
                 result.operands[1].regCode = romTable[rom];
                 result.operands[1].displacement = data;
             }
             else
             {
-                result.operands[0].code = Memory;
+                result.operands[0].opCode = Memory;
                 result.operands[0].regCode = romTable[rom];
                 result.operands[0].displacement = data;
-                result.operands[1].code = Register;
+                result.operands[1].opCode = Register;
                 result.operands[1].regCode = regTable[wide][reg];
             }
         }
@@ -325,9 +608,9 @@ Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide
             u8 src = dir ? reg : rom;
             u8 dest = dir ? rom : reg;
 
-            result.operands[0].code = Register;
+            result.operands[0].opCode = Register;
             result.operands[0].regCode = regTable[wide][src];
-            result.operands[1].code = Register;
+            result.operands[1].opCode = Register;
             result.operands[1].regCode = regTable[wide][dest];
         }
     }
@@ -335,19 +618,19 @@ Instruction RegRom(InstructionCode code, u8 byte1, u8 byte2, u8* buffer, u8 wide
     return result;
 }
 
-Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2, u8* buffer)
+Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer)
 {
     Instruction result = {};
-    result.code = code;
+    result.instCode = instCode;
 
     u8 dir = (byte1 >> 1) & 0b1;
     u8 wide = (byte1 >> 0) & 0b1;
     u8 mod = (byte2 >> 6) & 0b11;
     u8 rom = (byte2 >> 0) & 0b111;
 
-    bool mov = code == Mov;
+    bool mov = instCode == Mov;
     char* literals = wide ? "word" : "byte";
-    char* op = GetInstructionCodeStr(code);
+    char* op = GetInstructionCodeStr(instCode);
 
     if(mod == 0b00)
     {
@@ -362,18 +645,18 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
                 u8 byte4 = buffer[offset++];
                 s16 data = (byte4 << 8) | byte3;
 
-                result.operands[0].code = Immediate;
+                result.operands[0].opCode = Immediate;
                 result.operands[1].displacement = data;
-                result.operands[1].code = Memory;
+                result.operands[1].opCode = Memory;
                 result.operands[1].regCode = romTable[rom];
             }
             else if(dir && !wide)
             {
                 s16 data = byte3;
 
-                result.operands[0].code = Memory;
+                result.operands[0].opCode = Memory;
                 result.operands[0].regCode = romTable[rom];
-                result.operands[1].code = Immediate;
+                result.operands[1].opCode = Immediate;
                 result.operands[1].displacement = data;
             }
             else
@@ -382,9 +665,9 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
                 u8 byte5 = buffer[offset++];
                 s16 data = (byte4 << 8) | byte3;
 
-                result.operands[0].code = Immediate;
+                result.operands[0].opCode = Immediate;
                 result.operands[0].displacement = data;
-                result.operands[1].code = Immediate;
+                result.operands[1].opCode = Immediate;
                 result.operands[1].displacement = byte5;
             }
         }
@@ -394,9 +677,9 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
             s16 data = 0;
 
             int movTarget = mov ? 1 : 0;
-            result.operands[0].code = Memory;
+            result.operands[0].opCode = Memory;
             result.operands[0].regCode = romTable[rom];
-            result.operands[1].code = Immediate;
+            result.operands[1].opCode = Immediate;
             result.operands[movTarget].literals = literals;
 
             if(!dir && wide)
@@ -416,9 +699,9 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
     {
         s16 data = 0;
 
-        result.operands[0].code = Memory;
+        result.operands[0].opCode = Memory;
         result.operands[0].regCode = romTable[rom];
-        result.operands[1].code = Immediate;
+        result.operands[1].opCode = Immediate;
 
         if(mov)
         {
@@ -458,10 +741,10 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
         s16 displacement = (byte4 << 8) | byte3;
         s16 data = byte5;
 
-        result.operands[0].code = Memory;
+        result.operands[0].opCode = Memory;
         result.operands[0].regCode = romTable[rom];
         result.operands[0].displacement = displacement;
-        result.operands[1].code = Immediate;
+        result.operands[1].opCode = Immediate;
 
         if(mov)
         {
@@ -491,9 +774,9 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
             data = (byte4 << 8) | byte3;
         }
 
-        result.operands[0].code = Memory;
+        result.operands[0].opCode = Memory;
         result.operands[0].regCode = regTable[wide][rom];
-        result.operands[1].code = Immediate;
+        result.operands[1].opCode = Immediate;
         result.operands[1].displacement = data;
     }
 
@@ -544,8 +827,10 @@ int main(int argc, char **argv)
     int count = fread(buffer, sizeof(char), fileSize, file);
     fclose(file);
 
+    Registers regs = {};
     if(executionMode)
     {
+        fprintf(stdout, "--- test\\%s execution ---\n", targetFile);
     }
     else
     {
@@ -632,112 +917,112 @@ int main(int argc, char **argv)
         case 0x70:
         {
             s8 ip = byte2;
-            instruction.code = Jo;
+            instruction.instCode = Jo;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x71:
         {
             s8 ip = byte2;
-            instruction.code = Jno;
+            instruction.instCode = Jno;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x72:
         {
             s8 ip = byte2;
-            instruction.code = Jb;
+            instruction.instCode = Jb;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x73:
         {
             s8 ip = byte2;
-            instruction.code = Jnb;
+            instruction.instCode = Jnb;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x74:
         {
             s8 ip = byte2;
-            instruction.code = Je;
+            instruction.instCode = Je;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x75:
         {
             s8 ip = byte2;
-            instruction.code = Jne;
+            instruction.instCode = Jne;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x76:
         {
             s8 ip = byte2;
-            instruction.code = Jbe;
+            instruction.instCode = Jbe;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x77:
         {
             s8 ip = byte2;
-            instruction.code = Jnbe;
+            instruction.instCode = Jnbe;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x78:
         {
             s8 ip = byte2;
-            instruction.code = Js;
+            instruction.instCode = Js;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x79:
         {
             s8 ip = byte2;
-            instruction.code = Jns;
+            instruction.instCode = Jns;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x7a:
         {
             s8 ip = byte2;
-            instruction.code = Jp;
+            instruction.instCode = Jp;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x7b:
         {
             s8 ip = byte2;
-            instruction.code = Jnp;
+            instruction.instCode = Jnp;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x7c:
         {
             s8 ip = byte2;
-            instruction.code = Jl;
+            instruction.instCode = Jl;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x7d:
         {
             s8 ip = byte2;
-            instruction.code = Jnl;
+            instruction.instCode = Jnl;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x7e:
         {
             s8 ip = byte2;
-            instruction.code = Jle;
+            instruction.instCode = Jle;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0x7f:
         {
             s8 ip = byte2;
-            instruction.code = Jnle;
+            instruction.instCode = Jnle;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
@@ -785,21 +1070,21 @@ int main(int argc, char **argv)
                 data = (byte3 << 8) | byte2;
             }
             
-            instruction.code = Mov;
+            instruction.instCode = Mov;
                                           
             if(dir)
             {
-                instruction.operands[0].code = Immediate;
+                instruction.operands[0].opCode = Immediate;
                 instruction.operands[0].displacement = data;
                 instruction.operands[0].accumulator = true;
-                instruction.operands[1].code = Register;
+                instruction.operands[1].opCode = Register;
                 instruction.operands[1].regCode = regTable[wide][reg];
             }
             else
             {
-                instruction.operands[0].code = Register;
+                instruction.operands[0].opCode = Register;
                 instruction.operands[0].regCode = regTable[wide][reg];
-                instruction.operands[1].code = Immediate;
+                instruction.operands[1].opCode = Immediate;
                 instruction.operands[1].displacement = data;
                 instruction.operands[1].accumulator = true;
             }
@@ -837,28 +1122,28 @@ int main(int argc, char **argv)
         case 0xe0:
         {
             s8 ip = byte2;
-            instruction.code = Loopne;
+            instruction.instCode = Loopne;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0xe1:
         {
             s8 ip = byte2;
-            instruction.code = Loope;
+            instruction.instCode = Loope;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0xe2:
         {
             s8 ip = byte2;
-            instruction.code = Loop;
+            instruction.instCode = Loop;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
         case 0xe3:
         {
             s8 ip = byte2;
-            instruction.code = Jcxz;
+            instruction.instCode = Jcxz;
             instruction.operands[0].displacement = ip + 2;
         } break;
 
@@ -870,203 +1155,42 @@ int main(int argc, char **argv)
 
         }
 
+        Operand leftOperand = instruction.operands[0];
+        Operand rightOperand = instruction.operands[1];
+
+        char* leftOperandStr = GetRegCodeStr(leftOperand.regCode);
+        char* rightOperandStr = GetRegCodeStr(rightOperand.regCode);
+
         if(executionMode)
         {
+            char *regCode = GetRegCodeStr(leftOperand.regCode);
+            s16 regBefore = *GetRegister(&regs, leftOperand.regCode);
+
+            HandleInstruction(&regs, instruction.instCode, leftOperand, rightOperand);
+            PrintInstruction(instruction.instCode, leftOperand, rightOperand);
+
+            s16 regAfter = *GetRegister(&regs, leftOperand.regCode);
+            fprintf(stdout, " ; %s:0x%x->0x%x\n", regCode, regBefore, regAfter);
         }
         else
         {
-            char* instructionCode = GetInstructionCodeStr(instruction.code);
-
-            Operand leftOperand = instruction.operands[0];
-            Operand rightOperand = instruction.operands[1];
-
-            char* leftOperandStr = GetRegCodeStr(leftOperand.regCode);
-            char* rightOperandStr = GetRegCodeStr(rightOperand.regCode);
-
-            fprintf(stdout, "%s ", instructionCode);
-
-            switch(instruction.code)
-            {
-
-            case Add:
-            case Or:
-            case Adc:
-            case Sbb:
-            case And:
-            case Sub:
-            case Xor:
-            case Cmp:
-            {
-                if(leftOperand.code == Register)
-                {
-                    fprintf(stdout, "%s, ", leftOperandStr);
-                }
-                else if(leftOperand.code == Memory)
-                {
-                    if(rightOperand.code == Immediate)
-                    {
-                        if(leftOperand.literals)
-                        {
-                            fprintf(stdout, "%s [%s", leftOperand.literals, leftOperandStr);
-
-                            if(leftOperand.displacement)
-                            {
-                                fprintf(stdout, " + %d", leftOperand.displacement);
-                            }
-
-                            fprintf(stdout, "], ");
-                        }
-                        else
-                        {
-                            fprintf(stdout, "%s, ", leftOperandStr);
-                        }
-                    }
-                    else
-                    {
-                        fprintf(stdout, "[%s", leftOperandStr);
-
-                        if(leftOperand.displacement)
-                        {
-                            fprintf(stdout, " + %d", leftOperand.displacement);
-                        }
-
-                        fprintf(stdout, "], ");
-                    }
-                }
-
-                if(rightOperand.code == Register)
-                {
-                    fprintf(stdout, "%s", rightOperandStr);
-                }
-                else if(rightOperand.code == Memory)
-                {
-                    fprintf(stdout, "[");
-                    if(rightOperand.regCode != RegisterCode_None)
-                    {
-                        char* rightOperandStr = GetRegCodeStr(rightOperand.regCode);
-                        fprintf(stdout, "%s", rightOperandStr);
-
-                        if(rightOperand.displacement)
-                        {
-                            fprintf(stdout, " + %d", rightOperand.displacement);
-                        }
-                    }
-                    else
-                    {
-                        fprintf(stdout, "%d", rightOperand.displacement);
-                    }
-
-                    fprintf(stdout, "]");
-                }
-                else if(rightOperand.code == Immediate)
-                {
-                    fprintf(stdout, "%d", rightOperand.displacement);
-                }
-
-                fprintf(stdout, "\n");
-            } break;
-
-            case Mov: 
-            {
-                if(leftOperand.code == Register)
-                {
-                    fprintf(stdout, "%s, ", leftOperandStr);
-                }
-                else if(leftOperand.code == Memory)
-                {
-                    fprintf(stdout, "[%s", leftOperandStr);
-
-                    if(leftOperand.displacement)
-                    {
-                        fprintf(stdout, " + %d", leftOperand.displacement);
-                    }
-
-                    fprintf(stdout, "], ");
-                }
-                else if(leftOperand.code == Immediate)
-                {
-                    if(leftOperand.accumulator)
-                    {
-                        fprintf(stdout, "[%d], ", leftOperand.displacement);
-                    }
-                    else
-                    {
-                        fprintf(stdout, "%d, ", leftOperand.displacement);
-                    }
-                }
-
-                if(rightOperand.code == Register)
-                {
-                    fprintf(stdout, "%s", rightOperandStr);
-                }
-                else if(rightOperand.code == Memory)
-                {
-                    fprintf(stdout, "[");
-                    if(rightOperand.regCode != RegisterCode_None)
-                    {
-                        fprintf(stdout, "%s", rightOperandStr);
-
-                        if(rightOperand.displacement)
-                        {
-                            fprintf(stdout, " + %d", rightOperand.displacement);
-                        }
-                    }
-                    else
-                    {
-                        fprintf(stdout, "%d", rightOperand.displacement);
-                    }
-
-                    fprintf(stdout, "]");
-                }
-                else if(rightOperand.code == Immediate)
-                {
-                    if(rightOperand.accumulator)
-                    {
-                        fprintf(stdout, "[%d]", rightOperand.displacement);
-                    }
-                    else
-                    {
-                        if(rightOperand.literals)
-                        {
-                            fprintf(stdout, "%s ", rightOperand.literals);
-                        }
-                        fprintf(stdout, "%d", rightOperand.displacement);
-                    }
-                }
-
-                fprintf(stdout, "\n");
-
-            } break;
-
-            case Jo:
-            case Jno:
-            case Jb: 
-            case Jnb: 
-            case Je: 
-            case Jne: 
-            case Jbe: 
-            case Jnbe:
-            case Js: 
-            case Jns:
-            case Jp: 
-            case Jnp:
-            case Jl: 
-            case Jnl:
-            case Jle:
-            case Jnle: 
-            case Loopne:
-            case Loope:
-            case Loop:
-            case Jcxz:
-            { 
-                fprintf(stdout, "$+%d\n", instruction.operands[0].displacement);
-            }
-            break;
-
-
-            default: break;
-            }
+            PrintInstruction(instruction.instCode, leftOperand, rightOperand);
+            fprintf(stdout, "\n");
         }
+    }
+
+    if(executionMode)
+    {
+        fprintf(stdout, "\nFinal registers:\n");
+        fprintf(stdout, "\tax: 0x%04x (%d)\n", regs.ax, regs.ax);
+        fprintf(stdout, "\tbx: 0x%04x (%d)\n", regs.bx, regs.bx);
+        fprintf(stdout, "\tcx: 0x%04x (%d)\n", regs.cx, regs.cx);
+        fprintf(stdout, "\tdx: 0x%04x (%d)\n", regs.dx, regs.dx);
+        fprintf(stdout, "\tsp: 0x%04x (%d)\n", regs.sp, regs.sp);
+        fprintf(stdout, "\tbp: 0x%04x (%d)\n", regs.bp, regs.bp);
+        fprintf(stdout, "\tsi: 0x%04x (%d)\n", regs.si, regs.si);
+        fprintf(stdout, "\tdi: 0x%04x (%d)\n", regs.di, regs.di);
+        fprintf(stdout, "\n");
     }
 
     return 0;
