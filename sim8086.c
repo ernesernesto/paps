@@ -113,7 +113,6 @@ typedef struct Operand
 {
     OperandCode code;
     RegisterCode regCode;
-    u8 size;
     s16 displacement;
     bool accumulator;
 
@@ -355,6 +354,8 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
         if(rom == 0b110)
         {
             u8 byte3 = buffer[offset++];
+            
+            result.operands[0].literals = literals;
 
             if(!dir && wide)
             {
@@ -362,7 +363,6 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
                 s16 data = (byte4 << 8) | byte3;
 
                 result.operands[0].code = Immediate;
-                result.operands[0].literals = literals;
                 result.operands[1].displacement = data;
                 result.operands[1].code = Memory;
                 result.operands[1].regCode = romTable[rom];
@@ -373,7 +373,6 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
 
                 result.operands[0].code = Memory;
                 result.operands[0].regCode = romTable[rom];
-                result.operands[0].literals = literals;
                 result.operands[1].code = Immediate;
                 result.operands[1].displacement = data;
             }
@@ -384,7 +383,6 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
                 s16 data = (byte4 << 8) | byte3;
 
                 result.operands[0].code = Immediate;
-                result.operands[0].literals = literals;
                 result.operands[0].displacement = data;
                 result.operands[1].code = Immediate;
                 result.operands[1].displacement = byte5;
@@ -393,67 +391,42 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
         else
         {   
             u8 byte3 = buffer[offset++];
+            s16 data = 0;
+
+            int movTarget = mov ? 1 : 0;
+            result.operands[0].code = Memory;
+            result.operands[0].regCode = romTable[rom];
+            result.operands[1].code = Immediate;
+            result.operands[movTarget].literals = literals;
 
             if(!dir && wide)
             {
                 u8 byte4 = buffer[offset++];
-                s16 data = (byte4 << 8) | byte3;
-                if(mov)
-                {
-                    result.operands[0].code = Memory;
-                    result.operands[0].regCode = romTable[rom];
-                    result.operands[1].code = Immediate;
-                    result.operands[1].size = 1;
-                    result.operands[1].literals = "word";
-                    result.operands[1].displacement = data;
-                }
-                else
-                {
-                    result.operands[0].code = Memory;
-                    result.operands[0].regCode = romTable[rom];
-                    result.operands[0].literals = "word";
-                    result.operands[1].code = Immediate;
-                    result.operands[1].displacement = data;
-                }
+                data = (byte4 << 8) | byte3;
             }
             else
             {
-                s16 data = byte3;
-
-                if(mov)
-                {
-                    result.operands[0].code = Memory;
-                    result.operands[0].regCode = romTable[rom];
-                    result.operands[1].code = Immediate;
-                    result.operands[1].size = wide == 0 ? 0 : 1;
-                    result.operands[1].literals = literals;
-                    result.operands[1].displacement = data;
-                }
-                else
-                {
-                    result.operands[0].code = Memory;
-                    result.operands[0].regCode = romTable[rom];
-                    result.operands[0].literals = literals;
-                    result.operands[1].code = Immediate;
-                    result.operands[1].displacement = data;
-                }
+                data = byte3;
             }
+
+            result.operands[1].displacement = data;
         }
     }
     else if(mod == 0b01)
     {
+        s16 data = 0;
+
+        result.operands[0].code = Memory;
+        result.operands[0].regCode = romTable[rom];
+        result.operands[1].code = Immediate;
+
         if(mov)
         {
             s8 displacement = buffer[offset++];
-            s8 data = buffer[offset++];
+            data = buffer[offset++];
 
-            result.operands[0].code = Memory;
-            result.operands[0].regCode = romTable[rom];
             result.operands[0].displacement = displacement;
-            result.operands[1].code = Immediate;
-            result.operands[1].size = wide == 0 ? 0 : 1;
             result.operands[1].literals = literals;
-            result.operands[1].displacement = data;
         }
         else
         {
@@ -462,20 +435,18 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
             u8 byte5 = buffer[offset++];
             s16 displacement = (byte4 << 8) | byte3;
 
-            s16 data = byte5;
+            data = byte5;
             if(wide)
             {
                 u8 byte6 = buffer[offset++];
                 data = (byte6 << 8) | byte5;
             }
 
-            result.operands[0].code = Memory;
-            result.operands[0].regCode = romTable[rom];
             result.operands[0].displacement = displacement;
             result.operands[0].literals = literals;
-            result.operands[1].code = Immediate;
-            result.operands[1].displacement = data;
         }
+
+        result.operands[1].displacement = data;
 
     }
     else if(mod == 0b10)
@@ -487,6 +458,11 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
         s16 displacement = (byte4 << 8) | byte3;
         s16 data = byte5;
 
+        result.operands[0].code = Memory;
+        result.operands[0].regCode = romTable[rom];
+        result.operands[0].displacement = displacement;
+        result.operands[1].code = Immediate;
+
         if(mov)
         {
             if(wide)
@@ -495,25 +471,14 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode code, u8 byte1, u8 byte2,
                 data = (byte6 << 8) | byte5;
             }
 
-            result.operands[0].code = Memory;
-            result.operands[0].regCode = romTable[rom];
-            result.operands[0].displacement = displacement;
-            result.operands[1].code = Immediate;
-            result.operands[1].size = wide == 0 ? 0 : 1;
             result.operands[1].literals = literals;
-            result.operands[1].displacement = data;
         }
         else
         {
-            result.operands[0].code = Memory;
-            result.operands[0].regCode = romTable[rom];
-            result.operands[0].size = wide == 0 ? 0 : 1;
             result.operands[0].literals = literals;
-            result.operands[0].displacement = displacement;
-            result.operands[1].code = Immediate;
-            result.operands[1].displacement = data;
         }
 
+        result.operands[1].displacement = data;
     }
     else if(mod == 0b11)
     {
