@@ -370,6 +370,15 @@ void PrintInstruction(InstructionCode code, Operand leftOperand, Operand rightOp
                 fprintf(stdout, "], ");
             }
         }
+        else if(leftOperand.opCode == Immediate)
+        {
+            if(leftOperand.literals)
+            {
+                fprintf(stdout, "%s ", leftOperand.literals);
+            }
+
+            fprintf(stdout, "[%d], ", leftOperand.displacement);
+        }
 
         if(rightOperand.opCode == Register)
         {
