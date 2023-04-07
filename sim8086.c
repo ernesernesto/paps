@@ -29,8 +29,6 @@
 
 //printf("data %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(data));
 
-u32 offset = 0;
-
 typedef enum RegisterCode
 {
     RegisterCode_None,
@@ -57,6 +55,8 @@ typedef enum RegisterCode
     BX_DI,
     BP_SI, 
     BP_DI, 
+
+    IP,
 
     RegisterCode_Count,
 } RegisterCode;
@@ -99,7 +99,6 @@ typedef enum InstructionCode
     InstructionCode_Count,
 } InstructionCode;
 
-
 typedef enum OperandCode
 {
     Register,
@@ -114,7 +113,6 @@ typedef struct Operand
     OperandCode opCode;
     RegisterCode regCode;
     s16 displacement;
-    bool accumulator;
 
     char* literals;
 } Operand;
@@ -124,6 +122,21 @@ typedef struct Instruction
     InstructionCode instCode;
     Operand operands[2];
 } Instruction;
+
+typedef enum Flags
+{
+    FLAGS_C = 1 << 0,
+    FLAGS_P = 1 << 1,
+    FLAGS_A = 1 << 2,
+    FLAGS_Z = 1 << 3,
+    FLAGS_S = 1 << 4,
+    FLAGS_T = 1 << 5,
+    FLAGS_I = 1 << 6,
+    FLAGS_D = 1 << 7,
+    FLAGS_O = 1 << 8,
+} Flags;
+
+#define FLAGS_COUNT 9 
 
 RegisterCode romTable[8] = 
 {
@@ -152,7 +165,22 @@ typedef struct Registers
     s16 bp;
     s16 si;
     s16 di;
+
+    s16 ip;
 } Registers;
+
+static Registers regs = {};
+static s16 ip = 0;
+static s16 flags;
+
+typedef struct HandleInstructionResult
+{
+    s16 regBefore;
+    s16 regAfter;
+
+    s16 prevFlags;
+} HandleInstructionResult;
+
 
 char* GetRegCodeStr(RegisterCode code)
 {
@@ -181,6 +209,8 @@ char* GetRegCodeStr(RegisterCode code)
     case BX_DI: { result = "bx + di"; } break;
     case BP_SI: { result = "bp + si"; } break;
     case BP_DI: { result = "bp + di"; } break;
+
+    case IP: { result = "ip"; } break;
     default: break;
     }
 
@@ -200,6 +230,7 @@ s16 *GetRegister(Registers *registers, RegisterCode code)
     case BP: { result = &registers->bp; } break;
     case SI: { result = &registers->si; } break;
     case DI: { result = &registers->di; } break;
+    case IP: { result = &registers->ip; } break;
     default: break;
     }
 
@@ -248,36 +279,173 @@ char* GetInstructionCodeStr(InstructionCode code)
     return result;
 }
 
-void HandleInstruction(Registers *registers, InstructionCode code, Operand leftOperand, Operand rightOperand)
+char* GetFlagsStr(Flags flag)
 {
-    char* instructionCode = GetInstructionCodeStr(code);
+    char* result = 0;
+    switch(flag)
+    {
+
+    case FLAGS_C: { result = "C"; } break;
+    case FLAGS_P: { result = "P"; } break;
+    case FLAGS_A: { result = "A"; } break;
+    case FLAGS_Z: { result = "Z"; } break;
+    case FLAGS_S: { result = "S"; } break;
+    case FLAGS_T: { result = "T"; } break;
+    case FLAGS_I: { result = "I"; } break;
+    case FLAGS_D: { result = "D"; } break;
+    case FLAGS_O: { result = "O"; } break;
+
+    default: break;
+    }
+
+    return result;
+}
+
+void UpdateFlags(int val)
+{
+    bool bitSet = flags & FLAGS_S;
+    if(bitSet)
+    {
+        if(val >= 0)
+        {
+            flags ^= FLAGS_S;
+        }
+    }
+    else
+    {
+        if(val < 0)
+        {
+            flags ^= FLAGS_S;
+        }
+    }
+
+    bitSet = flags & FLAGS_Z;
+    if(bitSet)
+    {
+        if(val != 0)
+        {
+            flags ^= FLAGS_Z;
+        }
+    }
+    else
+    {
+        if(val == 0)
+        {
+            flags ^= FLAGS_Z;
+        }
+    }
+
+    //int setCount = 0;
+    //for(int index = 0; index < 16; ++index)
+    //{
+    //    if(flags & (1 << index))
+    //    {
+    //        ++setCount;
+    //    }
+    //}
+
+    //bool even = false;
+    //if(setCount > 1)
+    //{
+    //    even = (((int)(float)setCount / 2.0f) == 0);
+    //}
+
+    //printf("setcount %d even %d \n", setCount, even);
+    //bitSet = flags & FLAGS_P;
+    //if(bitSet)
+    //{
+    //    if(!even)
+    //    {
+    //        flags ^= FLAGS_P;
+    //    }
+    //}
+    //else
+    //{
+    //    if(even)
+    //    {
+    //        flags ^= FLAGS_P;
+    //    }
+    //}
+
+}
+
+HandleInstructionResult HandleInstruction(Registers *registers, InstructionCode code, Operand leftOperand, Operand rightOperand)
+{
+    HandleInstructionResult result = {};
+    result.prevFlags = flags;
+
+    s16 regBefore = *GetRegister(registers, leftOperand.regCode);
+
+    s16 *leftReg = GetRegister(registers, leftOperand.regCode);
+    s16 *rightReg = GetRegister(registers, rightOperand.regCode);
 
     switch(code)
     {
 
     case Add:
+    {
+        if(rightOperand.opCode == Register)
+        {
+            *leftReg = *leftReg + *rightReg;
+        }
+        else if(rightOperand.opCode == Memory)
+        {
+            *leftReg = *leftReg + *rightReg;
+        }
+        else if(rightOperand.opCode == Immediate)
+        {
+            *leftReg = *leftReg + rightOperand.displacement;
+        }
+    } break;
+
     case Or:
     case Adc:
     case Sbb:
     case And:
     case Sub:
+    {
+        if(rightOperand.opCode == Register)
+        {
+            *leftReg = *leftReg - *rightReg;
+        }
+        else if(rightOperand.opCode == Memory)
+        {
+        }
+        else if(rightOperand.opCode == Immediate)
+        {
+            *leftReg = *leftReg - rightOperand.displacement;
+        }
+
+        UpdateFlags(*leftReg);
+    } break;
+
     case Xor:
     case Cmp:
     {
+        s16 checkVal = 0;
+        if(rightOperand.opCode == Register)
+        {
+            checkVal = *leftReg - *rightReg;
+        }
+        else if(rightOperand.opCode == Memory)
+        {
+        }
+        else if(rightOperand.opCode == Immediate)
+        {
+            checkVal = *leftReg - rightOperand.displacement;
+        }
+
+        UpdateFlags(checkVal);
     } break;
 
     case Mov: 
     {
-        s16 *leftReg = GetRegister(registers, leftOperand.regCode);
-        s16 *rightReg = GetRegister(registers, rightOperand.regCode);
-
         if(rightOperand.opCode == Register)
         {
             *leftReg = *rightReg;
         }
         else if(rightOperand.opCode == Memory)
         {
-            *leftReg = *rightReg;
         }
         else if(rightOperand.opCode == Immediate)
         {
@@ -291,6 +459,14 @@ void HandleInstruction(Registers *registers, InstructionCode code, Operand leftO
     case Jnb: 
     case Je: 
     case Jne: 
+    {
+        bool bitSet = flags & FLAGS_Z;
+        if(!bitSet)
+        {
+            //Note: -2 since at this point to read jump opcode we already read 2 bytes
+            ip += leftOperand.displacement - 2;
+        }
+    } break;
     case Jbe: 
     case Jnbe:
     case Js: 
@@ -309,9 +485,15 @@ void HandleInstruction(Registers *registers, InstructionCode code, Operand leftO
     }
     break;
 
-
     default: break;
     }
+
+    s16 regAfter = *GetRegister(registers, leftOperand.regCode);
+
+    result.regBefore = regBefore;
+    result.regAfter = regAfter;
+
+    return result;
 }
 
 void PrintInstruction(InstructionCode code, Operand leftOperand, Operand rightOperand)
@@ -429,7 +611,7 @@ void PrintInstruction(InstructionCode code, Operand leftOperand, Operand rightOp
         }
         else if(leftOperand.opCode == Immediate)
         {
-            if(leftOperand.accumulator)
+            if(rightOperand.regCode == AL || rightOperand.regCode == AX)
             {
                 fprintf(stdout, "[%d], ", leftOperand.displacement);
             }
@@ -464,7 +646,7 @@ void PrintInstruction(InstructionCode code, Operand leftOperand, Operand rightOp
         }
         else if(rightOperand.opCode == Immediate)
         {
-            if(rightOperand.accumulator)
+            if(leftOperand.regCode == AL || leftOperand.regCode == AX)
             {
                 fprintf(stdout, "[%d]", rightOperand.displacement);
             }
@@ -509,6 +691,16 @@ void PrintInstruction(InstructionCode code, Operand leftOperand, Operand rightOp
     }
 }
 
+void PrintRegister(Registers *regs, RegisterCode regCode)
+{
+    s16 reg = *GetRegister(regs, regCode);
+    if(reg)
+    {
+        char *str = GetRegCodeStr(regCode);
+        fprintf(stdout, "%10s: 0x%04hx (%d)\n", str, reg, (u16)reg);
+    }
+}
+
 Instruction RegRom(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer, u8 wide, u8 reg, u8 imm)
 {
     Instruction result = {};
@@ -526,7 +718,7 @@ Instruction RegRom(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer, u8 
 
         if(wide)
         {
-            u8 byte3 = buffer[offset++];
+            u8 byte3 = buffer[ip++];
             data = (byte3 << 8) | byte2;
         }
 
@@ -541,8 +733,8 @@ Instruction RegRom(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer, u8 
         {
             if(rom == 0b110)
             {
-                u8 byte3 = buffer[offset++];
-                u8 byte4 = buffer[offset++];
+                u8 byte3 = buffer[ip++];
+                u8 byte4 = buffer[ip++];
                 s16 data = (byte4 << 8) | byte3;
 
                 result.operands[0].opCode = Register;
@@ -570,7 +762,7 @@ Instruction RegRom(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer, u8 
         }
         else if(mod == 0b01)
         {
-            s8 data = buffer[offset++];
+            s8 data = buffer[ip++];
 
             if(dir)
             {
@@ -591,8 +783,8 @@ Instruction RegRom(InstructionCode instCode, u8 byte1, u8 byte2, u8* buffer, u8 
         }
         else if(mod == 0b10)
         {
-            u8 byte3 = buffer[offset++];
-            u8 byte4 = buffer[offset++];
+            u8 byte3 = buffer[ip++];
+            u8 byte4 = buffer[ip++];
             s16 data = (byte4 << 8) | byte3;
 
             if(dir)
@@ -645,13 +837,13 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
     {
         if(rom == 0b110)
         {
-            u8 byte3 = buffer[offset++];
+            u8 byte3 = buffer[ip++];
             
             result.operands[0].literals = literals;
 
             if(!dir && wide)
             {
-                u8 byte4 = buffer[offset++];
+                u8 byte4 = buffer[ip++];
                 s16 data = (byte4 << 8) | byte3;
 
                 result.operands[0].opCode = Immediate;
@@ -670,8 +862,8 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
             }
             else
             {
-                u8 byte4 = buffer[offset++];
-                u8 byte5 = buffer[offset++];
+                u8 byte4 = buffer[ip++];
+                u8 byte5 = buffer[ip++];
                 s16 data = (byte4 << 8) | byte3;
 
                 result.operands[0].opCode = Immediate;
@@ -682,7 +874,7 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
         }
         else
         {   
-            u8 byte3 = buffer[offset++];
+            u8 byte3 = buffer[ip++];
             s16 data = 0;
 
             int movTarget = mov ? 1 : 0;
@@ -693,7 +885,7 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
 
             if(!dir && wide)
             {
-                u8 byte4 = buffer[offset++];
+                u8 byte4 = buffer[ip++];
                 data = (byte4 << 8) | byte3;
             }
             else
@@ -714,23 +906,23 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
 
         if(mov)
         {
-            s8 displacement = buffer[offset++];
-            data = buffer[offset++];
+            s8 displacement = buffer[ip++];
+            data = buffer[ip++];
 
             result.operands[0].displacement = displacement;
             result.operands[1].literals = literals;
         }
         else
         {
-            u8 byte3 = buffer[offset++];
-            u8 byte4 = buffer[offset++];
-            u8 byte5 = buffer[offset++];
+            u8 byte3 = buffer[ip++];
+            u8 byte4 = buffer[ip++];
+            u8 byte5 = buffer[ip++];
             s16 displacement = (byte4 << 8) | byte3;
 
             data = byte5;
             if(wide)
             {
-                u8 byte6 = buffer[offset++];
+                u8 byte6 = buffer[ip++];
                 data = (byte6 << 8) | byte5;
             }
 
@@ -743,9 +935,9 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
     }
     else if(mod == 0b10)
     {
-        u8 byte3 = buffer[offset++];
-        u8 byte4 = buffer[offset++];
-        u8 byte5 = buffer[offset++];
+        u8 byte3 = buffer[ip++];
+        u8 byte4 = buffer[ip++];
+        u8 byte5 = buffer[ip++];
 
         s16 displacement = (byte4 << 8) | byte3;
         s16 data = byte5;
@@ -759,7 +951,7 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
         {
             if(wide)
             {
-                u8 byte6 = buffer[offset++];
+                u8 byte6 = buffer[ip++];
                 data = (byte6 << 8) | byte5;
             }
 
@@ -774,12 +966,12 @@ Instruction AddOrAdcSbbAndSubXorCmpMov(InstructionCode instCode, u8 byte1, u8 by
     }
     else if(mod == 0b11)
     {
-        u8 byte3 = buffer[offset++];
+        u8 byte3 = buffer[ip++];
         s16 data = byte3;
 
         if(!dir && wide)
         {
-            u8 byte4 = buffer[offset++];
+            u8 byte4 = buffer[ip++];
             data = (byte4 << 8) | byte3;
         }
 
@@ -836,7 +1028,6 @@ int main(int argc, char **argv)
     int count = fread(buffer, sizeof(char), fileSize, file);
     fclose(file);
 
-    Registers regs = {};
     if(executionMode)
     {
         fprintf(stdout, "--- test\\%s execution ---\n", targetFile);
@@ -846,12 +1037,14 @@ int main(int argc, char **argv)
         fprintf(stdout, "bits 16\n\n");
     }
         
-    while(offset < fileSize)
+    while(ip < fileSize)
     {
+        s16 prevIp = ip;
+
         Instruction instruction = {};
 
-        u8 byte1 = buffer[offset++];
-        u8 byte2 = buffer[offset++];
+        u8 byte1 = buffer[ip++];
+        u8 byte2 = buffer[ip++];
 
         LOG("0x%x\n", byte1);
         LOG("byte1 %c%c%c%c%c%c%c%c\n", BYTE_TO_BINARY(byte1));
@@ -925,114 +1118,114 @@ int main(int argc, char **argv)
 
         case 0x70:
         {
-            s8 ip = byte2;
             instruction.instCode = Jo;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x71:
         {
-            s8 ip = byte2;
             instruction.instCode = Jno;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x72:
         {
-            s8 ip = byte2;
             instruction.instCode = Jb;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x73:
         {
-            s8 ip = byte2;
             instruction.instCode = Jnb;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x74:
         {
-            s8 ip = byte2;
             instruction.instCode = Je;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x75:
         {
-            s8 ip = byte2;
             instruction.instCode = Jne;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x76:
         {
-            s8 ip = byte2;
             instruction.instCode = Jbe;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x77:
         {
-            s8 ip = byte2;
             instruction.instCode = Jnbe;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x78:
         {
-            s8 ip = byte2;
             instruction.instCode = Js;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x79:
         {
-            s8 ip = byte2;
             instruction.instCode = Jns;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x7a:
         {
-            s8 ip = byte2;
             instruction.instCode = Jp;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x7b:
         {
-            s8 ip = byte2;
             instruction.instCode = Jnp;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x7c:
         {
-            s8 ip = byte2;
             instruction.instCode = Jl;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x7d:
         {
-            s8 ip = byte2;
             instruction.instCode = Jnl;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x7e:
         {
-            s8 ip = byte2;
             instruction.instCode = Jle;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x7f:
         {
-            s8 ip = byte2;
             instruction.instCode = Jnle;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0x80:
@@ -1043,7 +1236,6 @@ int main(int argc, char **argv)
             InstructionCode instructionCodes[8] = { Add, Or, Adc, Sbb, And, Sub, Xor, Cmp };
             u8 instructionCodeIndex = (byte2 >> 3) & 0b111;
             InstructionCode instructionCode = instructionCodes[instructionCodeIndex];
-
 
             instruction = AddOrAdcSbbAndSubXorCmpMov(instructionCode, byte1, byte2, buffer);
         }
@@ -1075,7 +1267,7 @@ int main(int argc, char **argv)
 
             if(wide)
             {
-                u8 byte3 = buffer[offset++];
+                u8 byte3 = buffer[ip++];
                 data = (byte3 << 8) | byte2;
             }
             
@@ -1085,7 +1277,6 @@ int main(int argc, char **argv)
             {
                 instruction.operands[0].opCode = Immediate;
                 instruction.operands[0].displacement = data;
-                instruction.operands[0].accumulator = true;
                 instruction.operands[1].opCode = Register;
                 instruction.operands[1].regCode = regTable[wide][reg];
             }
@@ -1095,7 +1286,6 @@ int main(int argc, char **argv)
                 instruction.operands[0].regCode = regTable[wide][reg];
                 instruction.operands[1].opCode = Immediate;
                 instruction.operands[1].displacement = data;
-                instruction.operands[1].accumulator = true;
             }
         } break;
 
@@ -1130,30 +1320,30 @@ int main(int argc, char **argv)
 
         case 0xe0:
         {
-            s8 ip = byte2;
             instruction.instCode = Loopne;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0xe1:
         {
-            s8 ip = byte2;
             instruction.instCode = Loope;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0xe2:
         {
-            s8 ip = byte2;
             instruction.instCode = Loop;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
         case 0xe3:
         {
-            s8 ip = byte2;
             instruction.instCode = Jcxz;
-            instruction.operands[0].displacement = ip + 2;
+            instruction.operands[0].displacement = (s8)byte2 + 2;
+            instruction.operands[0].regCode = IP;
         } break;
 
 
@@ -1172,14 +1362,51 @@ int main(int argc, char **argv)
 
         if(executionMode)
         {
-            char *regCode = GetRegCodeStr(leftOperand.regCode);
-            s16 regBefore = *GetRegister(&regs, leftOperand.regCode);
+            HandleInstructionResult instructionResult = HandleInstruction(&regs, instruction.instCode, leftOperand, rightOperand);
+            s16 prevFlags = instructionResult.prevFlags;
 
-            HandleInstruction(&regs, instruction.instCode, leftOperand, rightOperand);
             PrintInstruction(instruction.instCode, leftOperand, rightOperand);
 
-            s16 regAfter = *GetRegister(&regs, leftOperand.regCode);
-            fprintf(stdout, " ; %s:0x%x->0x%x\n", regCode, regBefore, regAfter);
+            char *regCode = GetRegCodeStr(leftOperand.regCode);
+            fprintf(stdout, "; %s:0x%04hx->0x%04hx ip:0x%04hx->0x%04hx", 
+                    regCode, 
+                    instructionResult.regBefore, 
+                    instructionResult.regAfter,
+                    prevIp,
+                    ip);
+
+            if(prevFlags != flags)
+            {
+                fprintf(stdout, " flags:");
+
+                for(int index = 0; index < FLAGS_COUNT; ++index)
+                {
+                    int bitVal = 1 << index;
+                    bool bitPreviouslySet = prevFlags & bitVal;
+                    bool bitCleared = (flags & bitVal) == 0;
+                    if(bitPreviouslySet && bitCleared)
+                    {
+                        char* flagStr = GetFlagsStr(bitVal);
+                        fprintf(stdout, "%s", flagStr);
+                    }
+                }
+
+                fprintf(stdout, "->");
+
+                for(int index = 0; index < FLAGS_COUNT; ++index)
+                {
+                    int bitVal = 1 << index;
+                    bool bitPreviouslyUnset = (prevFlags & bitVal) == 0;
+                    bool bitNowSet = flags & bitVal;
+                    if(bitPreviouslyUnset && bitNowSet)
+                    {
+                        char* flagStr = GetFlagsStr(bitVal);
+                        fprintf(stdout, "%s", flagStr);
+                    }
+                }
+            }
+
+            fprintf(stdout, "\n");
         }
         else
         {
@@ -1191,14 +1418,26 @@ int main(int argc, char **argv)
     if(executionMode)
     {
         fprintf(stdout, "\nFinal registers:\n");
-        fprintf(stdout, "\tax: 0x%04x (%d)\n", regs.ax, regs.ax);
-        fprintf(stdout, "\tbx: 0x%04x (%d)\n", regs.bx, regs.bx);
-        fprintf(stdout, "\tcx: 0x%04x (%d)\n", regs.cx, regs.cx);
-        fprintf(stdout, "\tdx: 0x%04x (%d)\n", regs.dx, regs.dx);
-        fprintf(stdout, "\tsp: 0x%04x (%d)\n", regs.sp, regs.sp);
-        fprintf(stdout, "\tbp: 0x%04x (%d)\n", regs.bp, regs.bp);
-        fprintf(stdout, "\tsi: 0x%04x (%d)\n", regs.si, regs.si);
-        fprintf(stdout, "\tdi: 0x%04x (%d)\n", regs.di, regs.di);
+        PrintRegister(&regs, AX);
+        PrintRegister(&regs, BX);
+        PrintRegister(&regs, CX);
+        PrintRegister(&regs, DX);
+        PrintRegister(&regs, SP);
+        PrintRegister(&regs, BP);
+        PrintRegister(&regs, SI);
+        PrintRegister(&regs, DI);
+        fprintf(stdout, "%10s: 0x%04hx (%d)\n", "ip", ip, (u16)ip);
+        fprintf(stdout, "%10s: ", "flags");
+        for(int index = 0; index < FLAGS_COUNT; ++index)
+        {
+            int bitVal = 1 << index;
+            bool bitSet = flags & bitVal;
+            if(bitSet)
+            {
+                char* flagStr = GetFlagsStr(bitVal);
+                fprintf(stdout, "%s", flagStr);
+            }
+        }
         fprintf(stdout, "\n");
     }
 
